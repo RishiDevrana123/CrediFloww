@@ -20,10 +20,13 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
+      required: [true, 'Password is required'],
+      minlength: [6, 'Password must be at least 6 characters'],
       select: false,
     },
     fullName: {
       type: String,
+      required: [true, 'Full name is required'],
       trim: true,
     },
     panCard: {

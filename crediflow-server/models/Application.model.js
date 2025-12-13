@@ -85,6 +85,11 @@ const applicationSchema = new mongoose.Schema(
         },
         filename: String,
         path: String,
+        verificationStatus: {
+          type: String,
+          enum: ['pending', 'verified', 'rejected'],
+          default: 'pending',
+        },
         uploadedAt: {
           type: Date,
           default: Date.now,
@@ -126,24 +131,6 @@ const applicationSchema = new mongoose.Schema(
       min: 0,
     },
     rejectionReason: {
-      type: String,
-    },
-    // KYC Verification fields
-    kycVerificationStatus: {
-      type: String,
-      enum: ['VERIFIED', 'FAILED', 'PENDING'],
-    },
-    kycVerificationDetails: {
-      confidence: Number,
-      reasons: [String],
-      verifiedAt: Date
-    },
-    // Underwriting fields
-    underwritingDecision: {
-      type: String,
-      enum: ['APPROVED', 'PENDING', 'REJECTED'],
-    },
-    sanctionLetterId: {
       type: String,
     },
     // Timestamps for stages

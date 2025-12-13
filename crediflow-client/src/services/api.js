@@ -1,8 +1,6 @@
 import axios from 'axios';
-import io from 'socket.io-client';
 
 const BASE_URL = 'http://localhost:5000/api';
-const SOCKET_URL = 'http://localhost:5000';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -38,10 +36,6 @@ api.interceptors.response.use(
   }
 );
 
-export const socket = io(SOCKET_URL, {
-  autoConnect: false,
-});
-
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
@@ -61,13 +55,6 @@ export const applicationAPI = {
   updateStage: (id, stage) => api.put(`/applications/${id}/stage`, { stage }),
   approve: (id, data) => api.put(`/applications/${id}/approve`, data),
   reject: (id, reason) => api.put(`/applications/${id}/reject`, { rejectionReason: reason }),
-};
-
-export const chatAPI = {
-  sendMessage: (data) => api.post('/chat/message', data),
-  getHistory: (applicationId) => api.get(`/chat/${applicationId}/history`),
-  verifyKYC: (applicationId) => api.post(`/chat/${applicationId}/verify-kyc`),
-  triggerUnderwriting: (applicationId) => api.post(`/chat/${applicationId}/underwrite`),
 };
 
 export default api;

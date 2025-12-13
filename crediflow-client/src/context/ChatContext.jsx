@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { applicationAPI, chatAPI, socket } from '../services/api';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { applicationAPI } from '../services/api';
 import { useAuth } from './AuthContext';
 
 const ChatContext = createContext();
@@ -68,9 +68,13 @@ export const ChatProvider = ({ children }) => {
   // Loading state
   const [isLoading, setIsLoading] = useState(false);
 
+  // Track if welcome message has been added
+  const welcomeAddedRef = useRef(false);
+
   // Initialize with welcome message
   useEffect(() => {
-    if (messages.length === 0) {
+    if (messages.length === 0 && !welcomeAddedRef.current) {
+      welcomeAddedRef.current = true;
       const welcomeName = isAuthenticated && authUser ? authUser.fullName.split(' ')[0] : '';
       const welcomeText = welcomeName 
         ? `Welcome back, ${welcomeName}! 👋 I'm here to help you with your loan application. What type of loan are you looking for?`
@@ -280,7 +284,7 @@ export const ChatProvider = ({ children }) => {
           
           addMessage({
             sender: 'bot',
-            text: `Perfect! Your application ${newApplication.data.applicationId} has been created for ₹${amount}.\n\n📄 **Next Step: Document Upload**\n\nPlease upload the following documents:\n\n1️⃣ **PAN Card** (Required) - Include "pan" in filename\n2️⃣ **Aadhar Card** (Required) - Include "aadhar" in filename\n3️⃣ **Salary Slip** (Optional) - Include "salary" in filename\n\n💡 Example: pan_card.jpg, aadhar_front.jpg, salary_slip.pdf\n\nUse the paperclip icon 📎 below to upload, then type "done" for instant verification!`,
+            text: `Perfect! Your application ${newApplication.data.applicationId} has been created for ₹${amount}. Now let's move to verification. Please upload your PAN card, Aadhar, and salary slips.`,
           });
           setCurrentStage('verification');
         } catch (error) {
@@ -314,24 +318,13 @@ export const ChatProvider = ({ children }) => {
         try {
           const formData = new FormData();
           formData.append('document', file);
-          
-          // Let backend AI identify document type by reading it
-          formData.append('type', 'auto-detect');
-          console.log(`📄 Uploading ${file.name} for AI identification...`);
+          formData.append('type', 'other');
 
-          const response = await applicationAPI.uploadDocument(applicationData._id, formData);
-          
-          // Backend will return detected document type
-          const detectedType = response.data.documents[response.data.documents.length - 1].type;
-          const docTypeLabel = detectedType === 'pan' ? 'PAN Card' : 
-                               detectedType === 'aadhar' ? 'Aadhar Card' : 
-                               detectedType === 'salary-slip' ? 'Salary Slip' : 
-                               detectedType === 'bank-statement' ? 'Bank Statement' :
-                               'Document';
+          await applicationAPI.uploadDocument(applicationData._id, formData);
           
           addMessage({
             sender: 'bot',
-            text: `✅ ${docTypeLabel} detected and uploaded!\n\nUpload more documents or type "done" when ready for verification.`,
+            text: `Thank you! ${file.name} uploaded successfully. Upload more documents or type "done" to proceed.`,
           });
         } catch (error) {
           console.error('Error uploading document:', error);
@@ -341,127 +334,84 @@ export const ChatProvider = ({ children }) => {
           });
         }
       } else if (lowerMessage.includes('done') && applicationId) {
-        // Trigger KYC verification with uploaded documents
+        // Move to underwriting
         try {
+          await applicationAPI.updateStage(applicationData._id, 'underwriting');
+          
           addMessage({
             sender: 'bot',
-            text: '🔍 Verifying your documents using AI...',
+            text: 'Excellent! Your documents are verified. Moving to underwriting...',
           });
+          setCurrentStage('underwriting');
           
-          const kycResponse = await chatAPI.verifyKYC(applicationId);
-          console.log('✅ KYC Response:', kycResponse);
-          
-          if (kycResponse.kycResult.status === 'VERIFIED') {
-            // KYC passed - proceed to underwriting
-            addMessage({
-              sender: 'bot',
-              text: `✅ Identity Verified!\n\nConfidence: ${(kycResponse.kycResult.confidence * 100).toFixed(0)}%\nCredit Score: ${kycResponse.kycResult.creditScore} (${kycResponse.kycResult.creditCategory})\n\nEvaluating your loan application...`,
-            });
-            
-            // Trigger underwriting
-            const underwritingResponse = await chatAPI.triggerUnderwriting(applicationId);
-            console.log('✅ Underwriting Response:', underwritingResponse);
-            
-            const decision = underwritingResponse.underwritingResult.decision;
-            const updatedApp = underwritingResponse.application;
-            
-            if (decision === 'APPROVED') {
-              setApplicationData(updatedApp);
-              setLoanDetails(prev => ({
-                ...prev,
-                status: 'approved',
-                approvedAmount: updatedApp.approvedAmount,
-                interestRate: updatedApp.interestRate,
-                emi: updatedApp.emi,
-              }));
+          // Auto-approve after 2 seconds (simulation)
+          setTimeout(async () => {
+            try {
+              await applicationAPI.updateStage(applicationData._id, 'sanction');
               
               addMessage({
                 sender: 'bot',
-                text: `🎉 Congratulations! Your loan is APPROVED!\n\n💰 Amount: ₹${updatedApp.approvedAmount.toLocaleString('en-IN')}\n📊 Credit Score: ${kycResponse.kycResult.creditScore}\n💳 Interest Rate: ${updatedApp.interestRate}%\n📅 Monthly EMI: ₹${updatedApp.emi.toLocaleString('en-IN')}\n\n✅ Your sanction letter is ready for download!`,
+                text: 'Great news! Underwriting complete. Moving to final sanction...',
               });
-              setCurrentStage('approved');
-            } else if (decision === 'PENDING') {
-              setApplicationData(updatedApp);
-              setLoanDetails(prev => ({ ...prev, status: 'under-review' }));
+              setCurrentStage('sanction');
               
-              addMessage({
-                sender: 'bot',
-                text: `⏳ Application Under Manual Review\n\nOur team will contact you within 24-48 hours.\n\nReason: ${underwritingResponse.underwritingResult.reasons.join(', ')}`,
-              });
-              setCurrentStage('underwriting');
-            } else {
-              // REJECTED
-              setApplicationData(updatedApp);
-              setLoanDetails(prev => ({ ...prev, status: 'rejected' }));
-              
-              addMessage({
-                sender: 'bot',
-                text: `❌ Application Declined\n\nReason: ${underwritingResponse.underwritingResult.reasons.join(', ')}\n\nYou may reapply after 3 months or contact our support for assistance.`,
-              });
-              setCurrentStage('consultation');
+              // Approve the loan
+              setTimeout(async () => {
+                const approved = await applicationAPI.approve(applicationData._id, {
+                  approvedAmount: loanDetails.requestedAmount,
+                  interestRate: 10.99,
+                  approvedTenure: 36,
+                });
+                
+                setLoanDetails(prev => ({
+                  ...prev,
+                  approvedAmount: approved.data.approvedAmount,
+                  interestRate: approved.data.interestRate,
+                  tenure: approved.data.approvedTenure,
+                  status: 'approved',
+                }));
+                
+                addMessage({
+                  sender: 'bot',
+                  text: `🎉 Congratulations! Your loan has been APPROVED!\n\nApplication ID: ${applicationId}\nApproved Amount: ₹${approved.data.approvedAmount}\nInterest Rate: ${approved.data.interestRate}% p.a.\nTenure: ${approved.data.approvedTenure} months\nEMI: ₹${approved.data.emi}\n\nYour loan will be disbursed within 2 business days!`,
+                });
+                setCurrentStage('completed');
+              }, 2000);
+            } catch (error) {
+              console.error('Error in approval:', error);
             }
-            
-          } else {
-            // KYC failed
-            addMessage({
-              sender: 'bot',
-              text: `❌ Document Verification Failed\n\nReasons:\n- ${kycResponse.kycResult.reasons.join('\n- ')}\n\nPlease re-upload clear, legible documents or contact support.`,
-            });
-            setLoanDetails(prev => ({ ...prev, status: 'rejected' }));
-          }
-          
+          }, 2000);
         } catch (error) {
-          console.error('❌ Error in verification:', error);
-          addMessage({
-            sender: 'bot',
-            text: `⚠️ Verification Error: ${error.response?.data?.message || error.message}\n\nPlease ensure you've uploaded at least PAN and Aadhar cards.`,
-          });
+          console.error('Error updating stage:', error);
         }
-      } else if (lowerMessage.includes('done') && !applicationId) {
-        addMessage({
-          sender: 'bot',
-          text: 'Please create a loan application first before uploading documents.',
-        });
       } else {
         addMessage({
           sender: 'bot',
-          text: 'Please upload your documents using the paperclip icon 📎, then type "done" when ready.',
+          text: 'Please upload documents or type "done" to continue.',
         });
       }
     }
-    // Auto-approve after 2 seconds (simulation) - REMOVED, now using real AI verification
-    else if (currentStage === 'underwriting') {
-      addMessage({
-        sender: 'bot',
-        text: 'Your application is being reviewed. Please wait for the decision.',
-      });
-    }
-    else if (currentStage === 'sanction') {
-      addMessage({
-        sender: 'bot',
-        text: 'Your sanction letter is being generated. You can download it from the application details.',
-      });
-    }
-    else if (currentStage === 'approved') {
-      addMessage({
-        sender: 'bot',
-        text: 'Your loan has been approved! You can download your sanction letter or ask any questions about the loan terms.',
-      });
-    }
-    // Default response
+    // Other stages
     else {
       addMessage({
         sender: 'bot',
-        text: 'I\'m here to help with your loan application! How can I assist you today?',
+        text: 'Your application is being processed. Thank you for your patience!',
       });
     }
   };
 
+  // Update loan stage manually (for testing)
+  const updateStage = (stage) => {
+    setCurrentStage(stage);
+  };
+
+  // Reset chat
   const resetChat = () => {
     setMessages([]);
     setCurrentStage('sales');
     setCollectingField('loanType'); // Reset to start
     setApplicationId(null);
+    setApplicationMongoId(null);
     setApplicationData(null);
     setLoanDetails({
       fullName: '',
@@ -480,36 +430,36 @@ export const ChatProvider = ({ children }) => {
       id: 'user_' + Date.now(),
       name: 'Guest User',
     });
-    // Re-add welcome message
+    // Reset welcome message ref and re-add welcome message
+    welcomeAddedRef.current = false;
     setTimeout(() => {
-      addMessage({
-        sender: 'bot',
-        text: 'Welcome to CrediFlow! 👋 I\'m here to help you with your loan application. Let\'s start by understanding your requirements. What type of loan are you looking for?',
-        timestamp: new Date(),
-      });
+      if (!welcomeAddedRef.current) {
+        welcomeAddedRef.current = true;
+        addMessage({
+          sender: 'bot',
+          text: 'Welcome to CrediFlow! 👋 I\'m here to help you with your loan application. Let\'s start by understanding your requirements. What type of loan are you looking for?',
+          timestamp: new Date(),
+        });
+      }
     }, 100);
   };
 
-  return (
-    <ChatContext.Provider
-      value={{
-        user,
-        setUser,
-        messages,
-        addMessage,
-        sendMessage,
-        currentStage,
-        updateStage: setCurrentStage,
-        loanDetails,
-        setLoanDetails,
-        isLoading,
-        resetChat,
-        applicationId,
-        applicationMongoId,
-        applicationData,
-      }}
-    >
-      {children}
-    </ChatContext.Provider>
-  );
+  const value = {
+    user,
+    setUser,
+    messages,
+    addMessage,
+    sendMessage,
+    currentStage,
+    updateStage,
+    loanDetails,
+    setLoanDetails,
+    isLoading,
+    resetChat,
+    applicationId,
+    applicationMongoId,
+    applicationData,
+  };
+
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 };

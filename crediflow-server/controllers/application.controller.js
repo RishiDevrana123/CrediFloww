@@ -1,12 +1,45 @@
 import Application from '../models/Application.model.js';
 import PDFDocument from 'pdfkit';
 
-// Create new application
+// Create new application with mock approval flow
 export const createApplication = async (req, res) => {
   try {
     console.log('📝 Creating application with data:', req.body);
+    
+    // Create application
     const application = await Application.create(req.body);
     console.log('✅ Application created successfully:', application.applicationId);
+    
+    // Mock automatic approval after 3 seconds (simulating processing)
+    setTimeout(async () => {
+      try {
+        // Mock approval logic
+        const mockInterestRate = 10.99; // Fixed interest rate
+        const mockCreditScore = 750; // Mock credit score
+        const approvedAmount = application.loanAmount; // Approve requested amount
+        
+        // Calculate EMI
+        const principal = approvedAmount;
+        const rate = mockInterestRate / 12 / 100;
+        const tenure = application.tenure;
+        const emi = (principal * rate * Math.pow(1 + rate, tenure)) / (Math.pow(1 + rate, tenure) - 1);
+        
+        // Update application with approval
+        application.status = 'approved';
+        application.stage = 'completed';
+        application.approvedAmount = approvedAmount;
+        application.approvedTenure = tenure;
+        application.interestRate = mockInterestRate;
+        application.creditScore = mockCreditScore;
+        application.emi = Math.round(emi);
+        
+        await application.save();
+        console.log('✅ Application auto-approved:', application.applicationId);
+      } catch (error) {
+        console.error('❌ Error auto-approving:', error.message);
+      }
+    }, 3000);
+    
     res.status(201).json({
       status: 'success',
       data: application,
@@ -124,7 +157,7 @@ export const deleteApplication = async (req, res) => {
   }
 };
 
-// Upload document
+// Upload document with mock KYC verification
 export const uploadDocument = async (req, res) => {
   try {
     const application = await Application.findById(req.params.id);
@@ -135,30 +168,57 @@ export const uploadDocument = async (req, res) => {
       });
     }
 
-    // Import Gemini service for document identification
-    const { identifyDocumentType } = await import('../services/ocr.service.js');
+    const filename = req.file.filename.toLowerCase();
+    const originalname = req.file.originalname.toLowerCase();
     
-    let docType = req.body.type;
+    // Mock KYC verification based on filename
+    let docType = req.body.type || 'other';
+    let verificationStatus = 'pending';
     
-    // If type is auto-detect, use AI to identify the document
-    if (docType === 'auto-detect' || !docType) {
-      console.log('🤖 Using AI to identify document type...');
-      const identifiedType = await identifyDocumentType(req.file.path);
-      docType = identifiedType;
-      console.log(`✅ Document identified as: ${docType}`);
+    // Check filename for document type
+    if (filename.includes('pan') || originalname.includes('pan')) {
+      docType = 'pan';
+      // Mock PAN verification - check if filename contains valid PAN pattern
+      if (/[a-z]{5}[0-9]{4}[a-z]/i.test(filename) || /[a-z]{5}[0-9]{4}[a-z]/i.test(originalname)) {
+        verificationStatus = 'verified';
+      }
+    } else if (filename.includes('aadhar') || filename.includes('aadhaar') || originalname.includes('aadhar')) {
+      docType = 'aadhar';
+      // Mock Aadhar verification - check if filename contains 12 digits
+      if (/\d{12}/.test(filename) || /\d{12}/.test(originalname)) {
+        verificationStatus = 'verified';
+      }
+    } else if (filename.includes('salary') || originalname.includes('salary') || filename.includes('slip')) {
+      docType = 'salary-slip';
+      verificationStatus = 'verified'; // Auto-verify salary slips
+    } else if (filename.includes('bank') || originalname.includes('bank') || filename.includes('statement')) {
+      docType = 'bank-statement';
+      verificationStatus = 'verified'; // Auto-verify bank statements
     }
 
     const document = {
       type: docType,
       filename: req.file.filename,
       path: req.file.path,
+      verificationStatus,
     };
 
     application.documents.push(document);
+    
+    // If both PAN and Aadhar are verified, move to next stage
+    const panDoc = application.documents.find(d => d.type === 'pan');
+    const aadharDoc = application.documents.find(d => d.type === 'aadhar');
+    
+    if (panDoc && aadharDoc && panDoc.verificationStatus === 'verified' && aadharDoc.verificationStatus === 'verified') {
+      application.stage = 'verification';
+      application.status = 'under-review';
+    }
+    
     await application.save();
 
     res.json({
       status: 'success',
+      message: `Document uploaded successfully. Verification status: ${verificationStatus}`,
       data: application,
     });
   } catch (error) {
