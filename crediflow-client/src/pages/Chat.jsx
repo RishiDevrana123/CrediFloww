@@ -248,7 +248,10 @@ const Chat = () => {
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.3, delay: index * 0.05 }}
                 >
-                  <MessageBubble message={message} />
+                  <MessageBubble 
+                    message={message} 
+                    onOptionClick={(value) => sendMessage(value)}
+                  />
                 </motion.div>
               ))}
             </AnimatePresence>

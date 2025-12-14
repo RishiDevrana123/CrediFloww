@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-const MessageBubble = ({ message }) => {
-  const { sender, text, timestamp, file } = message;
+const MessageBubble = ({ message, onOptionClick }) => {
+  const { sender, text, timestamp, file, options } = message;
   const isBot = sender === 'bot';
 
   const formatTime = (date) => {
@@ -23,7 +23,7 @@ const MessageBubble = ({ message }) => {
           }`}
         >
           <span className="text-white text-sm font-semibold">
-            {isBot ? '🤖' : '👤'}
+            {isBot ? 'CF' : 'U'}
           </span>
         </motion.div>
 
@@ -60,6 +60,23 @@ const MessageBubble = ({ message }) => {
             <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
               {text}
             </p>
+
+            {/* Clickable Options */}
+            {options && options.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {options.map((option, index) => (
+                  <motion.button
+                    key={index}
+                    whileHover={{ scale: 1.02, x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onOptionClick && onOptionClick(option.value)}
+                    className="w-full text-left px-4 py-2.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-blue-500/10 hover:from-purple-500/20 hover:to-blue-500/20 dark:from-purple-400/10 dark:to-blue-400/10 dark:hover:from-purple-400/20 dark:hover:to-blue-400/20 border border-purple-300/30 dark:border-purple-500/30 text-gray-800 dark:text-gray-100 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
+                  >
+                    {option.text}
+                  </motion.button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Timestamp */}

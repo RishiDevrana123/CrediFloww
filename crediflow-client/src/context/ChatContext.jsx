@@ -47,8 +47,11 @@ export const ChatProvider = ({ children }) => {
   // Current loan stage: sales, verification, underwriting, sanction, completed
   const [currentStage, setCurrentStage] = useState('sales');
 
+  // Track conversation flow
+  const [conversationStep, setConversationStep] = useState('initial'); // initial, loan_type_selection, eligibility, info, support
+
   // Track what information we're currently collecting
-  const [collectingField, setCollectingField] = useState('loanType'); // loanType, name, email, phone, pan, aadhar, amount
+  const [collectingField, setCollectingField] = useState('menu'); // menu, loanType, name, email, phone, pan, aadhar, amount
 
   // Loan details
   const [loanDetails, setLoanDetails] = useState({
@@ -77,14 +80,29 @@ export const ChatProvider = ({ children }) => {
       welcomeAddedRef.current = true;
       const welcomeName = isAuthenticated && authUser ? authUser.fullName.split(' ')[0] : '';
       const welcomeText = welcomeName 
-        ? `Welcome back, ${welcomeName}! 👋 I'm here to help you with your loan application. What type of loan are you looking for?`
-        : 'Welcome to CrediFlow! 👋 I\'m here to help you with your loan application. Let\'s start by understanding your requirements. What type of loan are you looking for?';
+        ? `Welcome back, ${welcomeName}! I'm your CrediFlow assistant.`
+        : 'Hello! Welcome to CrediFlow - Your trusted financial partner.';
       
       addMessage({
         sender: 'bot',
         text: welcomeText,
         timestamp: new Date(),
       });
+
+      // Add options after welcome message
+      setTimeout(() => {
+        addMessage({
+          sender: 'bot',
+          text: 'I\'m here to guide you through your loan journey. What would you like to explore today?',
+          timestamp: new Date(),
+          options: [
+            { text: 'Start New Loan Application', value: 'apply' },
+            { text: 'Check Eligibility Requirements', value: 'eligibility' },
+            { text: 'Compare Loan Products', value: 'info' },
+            { text: 'Connect with Support', value: 'support' }
+          ]
+        });
+      }, 500);
     }
   }, []);
 
@@ -131,8 +149,90 @@ export const ChatProvider = ({ children }) => {
 
     // Sales stage - gather information and create application
     if (currentStage === 'sales') {
+      
+      // Main menu options
+      if (collectingField === 'menu') {
+        // Option 1: Apply for a New Loan
+        if (lowerMessage.includes('apply')) {
+          setCollectingField('loanType');
+          setConversationStep('loan_type_selection');
+          addMessage({
+            sender: 'bot',
+            text: 'Excellent! Let\'s find the perfect loan solution for you. Each product is designed with competitive rates and flexible terms.',
+            options: [
+              { text: 'Home Loan - Property Purchase or Renovation', value: 'home' },
+              { text: 'Business Loan - Capital for Growth', value: 'business' },
+              { text: 'Personal Loan - Flexible Financing', value: 'personal' }
+            ]
+          });
+        }
+        // Option 2: Check Eligibility
+        else if (lowerMessage.includes('eligibility')) {
+          setConversationStep('eligibility');
+          addMessage({
+            sender: 'bot',
+            text: '**Basic Eligibility Requirements:**\n\n• Age Range: 21 to 65 years\n• Minimum Monthly Income: ₹25,000\n• Credit Score: 650 or above (recommended)\n• Employment Status: Salaried or Self-employed\n• Documentation: Valid PAN, Aadhar, and income proof\n\n*Meeting these criteria increases your approval chances significantly.*',
+            options: [
+              { text: 'I qualify - Start application', value: 'apply' },
+              { text: 'View detailed product info', value: 'info' },
+              { text: 'Return to main options', value: 'menu' }
+            ]
+          });
+        }
+        // Option 3: Learn About Products
+        else if (lowerMessage.includes('info')) {
+          setConversationStep('info');
+          addMessage({
+            sender: 'bot',
+            text: '**Comprehensive Loan Solutions:**\n\n**Home Loan**\n→ Interest Rate: Starting 8.5% p.a.\n→ Maximum Amount: Up to ₹5 Crore\n→ Repayment Period: Up to 30 years\n→ Special Feature: Tax benefits under 80C & 24(b)\n\n**Business Loan**\n→ Interest Rate: Starting 11% p.a.\n→ Maximum Amount: Up to ₹50 Lakhs\n→ Repayment Period: Up to 5 years\n→ Special Feature: No collateral needed for loans under ₹10L\n\n**Personal Loan**\n→ Interest Rate: Starting 10.5% p.a.\n→ Maximum Amount: Up to ₹25 Lakhs\n→ Repayment Period: Up to 7 years\n→ Special Feature: Instant approval for eligible applicants',
+            options: [
+              { text: 'Begin application process', value: 'apply' },
+              { text: 'Verify my eligibility', value: 'eligibility' },
+              { text: 'Speak with loan advisor', value: 'support' }
+            ]
+          });
+        }
+        // Option 4: Support
+        else if (lowerMessage.includes('support')) {
+          setConversationStep('support');
+          addMessage({
+            sender: 'bot',
+            text: '**Customer Support Channels:**\n\nOur dedicated team is ready to assist you:\n\n• Helpline: 1800-XXX-XXXX (Toll-free)\n• Email: support@crediflow.com\n• Business Hours: Monday to Saturday, 9:00 AM - 6:00 PM\n\nFor immediate loan assistance, you can start your application right here.',
+            options: [
+              { text: 'Start loan application', value: 'apply' },
+              { text: 'Return to main menu', value: 'menu' }
+            ]
+          });
+        }
+        // Show main menu again
+        else if (lowerMessage.includes('menu')) {
+          addMessage({
+            sender: 'bot',
+            text: 'What would you like to do next?',
+            options: [
+              { text: 'Start New Loan Application', value: 'apply' },
+              { text: 'Check Eligibility Requirements', value: 'eligibility' },
+              { text: 'Compare Loan Products', value: 'info' },
+              { text: 'Connect with Support', value: 'support' }
+            ]
+          });
+        }
+        else {
+          addMessage({
+            sender: 'bot',
+            text: 'I didn\'t quite understand that. Please select one of these options:',
+            options: [
+              { text: 'Start New Loan Application', value: 'apply' },
+              { text: 'Check Eligibility Requirements', value: 'eligibility' },
+              { text: 'Compare Loan Products', value: 'info' },
+              { text: 'Connect with Support', value: 'support' }
+            ]
+          });
+        }
+      }
+      
       // Collect loan type
-      if (collectingField === 'loanType') {
+      else if (collectingField === 'loanType') {
         if (lowerMessage.includes('personal')) {
           const updatedDetails = { ...loanDetails, loanType: 'personal' };
           
@@ -145,14 +245,14 @@ export const ChatProvider = ({ children }) => {
             setCollectingField('pan');
             addMessage({
               sender: 'bot',
-              text: `Great! Personal loan selected for ${authUser.fullName}. What is your PAN card number?`,
+              text: `Excellent choice, ${authUser.fullName}! Personal loans offer maximum flexibility for various financial needs.\n\n**Key Features:**\n→ Interest Rate: 10.5% - 15% per annum\n→ Loan Amount: ₹50,000 to ₹25 Lakhs\n→ Tenure Options: 12 to 84 months\n→ Common Uses: Medical expenses, education, weddings, debt consolidation\n\nLet's proceed with your application. Please provide your PAN card number:`,
             });
           } else {
             setLoanDetails(prev => ({ ...prev, loanType: 'personal' }));
             setCollectingField('name');
             addMessage({
               sender: 'bot',
-              text: 'Great! Personal loan selected. What is your full name?',
+              text: 'Personal Loan selected - an excellent choice for flexible financing.\n\n**Benefits:**\n→ Quick approval within 24-48 hours\n→ Minimal documentation required\n→ Flexible repayment schedules\n→ No collateral needed\n\nTo get started, please provide your full name:',
             });
           }
         } else if (lowerMessage.includes('home')) {
@@ -166,14 +266,14 @@ export const ChatProvider = ({ children }) => {
             setCollectingField('pan');
             addMessage({
               sender: 'bot',
-              text: `Excellent! Home loan selected for ${authUser.fullName}. What is your PAN card number?`,
+              text: `Perfect choice, ${authUser.fullName}! You're taking a significant step toward property ownership.\n\n**Home Loan Advantages:**\n→ Competitive rates starting at 8.5% per annum\n→ Loan amount up to ₹5 Crore\n→ Repayment tenure up to 30 years\n→ Tax benefits under Section 80C & Section 24(b)\n→ Property title verification included\n\nLet's begin your application. Please provide your PAN card number:`,
             });
           } else {
             setLoanDetails(prev => ({ ...prev, loanType: 'home' }));
             setCollectingField('name');
             addMessage({
               sender: 'bot',
-              text: 'Excellent! Home loan selected. What is your full name?',
+              text: 'Home Loan selected - investing in property is always a smart decision.\n\n**Why Choose Our Home Loan:**\n→ Market-leading interest rates\n→ Streamlined documentation process\n→ Rapid loan disbursal\n→ Dedicated property advisor support\n\nTo begin, please provide your full name:',
             });
           }
         } else if (lowerMessage.includes('business')) {
@@ -187,20 +287,20 @@ export const ChatProvider = ({ children }) => {
             setCollectingField('pan');
             addMessage({
               sender: 'bot',
-              text: `Perfect! Business loan selected for ${authUser.fullName}. What is your PAN card number?`,
+              text: `Great decision, ${authUser.fullName}! Business loans are designed to fuel entrepreneurial growth.\n\n**Business Loan Details:**\n→ Interest rates starting from 11% per annum\n→ Funding up to ₹50 Lakhs\n→ Flexible tenure: 12 to 60 months\n→ No collateral required for loans under ₹10 Lakhs\n\n**Ideal For:**\n→ Working capital requirements\n→ Business expansion initiatives\n→ Equipment and machinery purchase\n→ Inventory management\n\nLet's start your application. Please provide your PAN card number:`,
             });
           } else {
             setLoanDetails(prev => ({ ...prev, loanType: 'business' }));
             setCollectingField('name');
             addMessage({
               sender: 'bot',
-              text: 'Perfect! Business loan selected. What is your full name?',
+              text: 'Business Loan selected - fueling growth through strategic financing.\n\n**What We Offer:**\n→ Fast approval within 48 hours\n→ Competitive interest rates\n→ Tailored repayment solutions\n→ Dedicated business relationship manager\n\nTo proceed, please provide your full name:',
             });
           }
         } else {
           addMessage({
             sender: 'bot',
-            text: 'I can help you with Personal, Home, or Business loans. Which one would you like?',
+            text: 'Please select one of our loan products:\n\n**Home Loan** - Property purchase or renovation\n**Business Loan** - Capital for business growth\n**Personal Loan** - Flexible personal financing\n\nType "Home", "Business", or "Personal" to continue.',
           });
         }
       }
@@ -210,7 +310,7 @@ export const ChatProvider = ({ children }) => {
         setCollectingField('email');
         addMessage({
           sender: 'bot',
-          text: `Nice to meet you, ${text}! What is your email address?`,
+          text: `Thank you, ${text}. It's a pleasure to assist you.\n\nPlease provide your email address for application updates and communications:`,
         });
       }
       // Collect email (only if not authenticated)
@@ -219,7 +319,7 @@ export const ChatProvider = ({ children }) => {
         setCollectingField('phone');
         addMessage({
           sender: 'bot',
-          text: 'Great! What is your phone number (10 digits)?',
+          text: 'Email address confirmed.\n\nNow, please provide your mobile number (10 digits):',
         });
       }
       // Collect phone (only if not authenticated)
@@ -228,7 +328,7 @@ export const ChatProvider = ({ children }) => {
         setCollectingField('pan');
         addMessage({
           sender: 'bot',
-          text: 'Perfect! What is your PAN card number?',
+          text: 'Mobile number recorded.\n\nFor identity verification, please provide your PAN card number.\n(Format: ABCDE1234F)',
         });
       }
       // Collect PAN
@@ -237,7 +337,7 @@ export const ChatProvider = ({ children }) => {
         setCollectingField('aadhar');
         addMessage({
           sender: 'bot',
-          text: 'Thank you! What is your Aadhar number (12 digits)?',
+          text: 'PAN card verified successfully.\n\nNext, please provide your Aadhar number for KYC compliance.\n(12-digit number)',
         });
       }
       // Collect Aadhar
@@ -246,7 +346,7 @@ export const ChatProvider = ({ children }) => {
         setCollectingField('amount');
         addMessage({
           sender: 'bot',
-          text: 'Excellent! How much loan amount do you need?',
+          text: 'Identity documents verified successfully.\n\nNow, please specify the loan amount you require:\n(Enter numerical value, e.g., 500000 for ₹5 Lakhs)',
         });
       }
       // Collect amount and create application
