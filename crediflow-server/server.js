@@ -20,7 +20,12 @@ app.use(helmet());
 app.use(compression());
 app.use(morgan('dev'));
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: [
+    process.env.CLIENT_URL || 'http://localhost:5173',
+    'https://credi-floxww-36iczwerral.app',
+    /\.vercel\.app$/,
+    /\.onrender\.com$/
+  ],
   credentials: true,
 }));
 app.use(express.json());
